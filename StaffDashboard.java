@@ -2,26 +2,29 @@
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.List;
 
 public class StaffDashboard {
 
     private JFrame frame;
     private JTable taskTable;
     private DefaultTableModel taskModel;
+    private final int staffId;
 
     private JLabel totalLabel;
     private JLabel pendingLabel;
     private JLabel progressLabel;
     private JLabel completedLabel;
 
-    // Same colours as StudentDashboard and AdminDashboard
     private final Color darkGreen = new Color(20, 83, 45);
     private final Color paleGreen = new Color(240, 253, 244);
     private final Color borderGreen = new Color(187, 220, 195);
     private final Color mutedGreen = new Color(82, 115, 90);
 
-    public StaffDashboard() {
+    public StaffDashboard(int staffId) {
+        this.staffId = staffId;
         createDashboard();
     }
 
@@ -32,8 +35,6 @@ public class StaffDashboard {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setLocationRelativeTo(null);
         frame.setLayout(new BorderLayout());
-
-        // ================= MAIN PANEL =================
 
         JPanel mainPanel = new JPanel(new BorderLayout());
         mainPanel.setBackground(Color.WHITE);
@@ -46,7 +47,6 @@ public class StaffDashboard {
         navPanel.setBorder(
                 BorderFactory.createEmptyBorder(5, 15, 5, 20));
 
-        // LOGO
         JPanel logoPanel = new JPanel(
                 new FlowLayout(FlowLayout.LEFT, 8, 8));
         logoPanel.setBackground(darkGreen);
@@ -69,7 +69,6 @@ public class StaffDashboard {
         logoPanel.add(iconLabel);
         logoPanel.add(logoText);
 
-        // NAVBAR RIGHT
         JPanel rightPanel = new JPanel(
                 new FlowLayout(FlowLayout.RIGHT, 12, 10));
         rightPanel.setBackground(darkGreen);
@@ -96,37 +95,29 @@ public class StaffDashboard {
         // ================= PAGE CONTENT =================
 
         JPanel contentPanel = new JPanel();
-        contentPanel.setLayout(
-                new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
+        contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
         contentPanel.setBackground(Color.WHITE);
         contentPanel.setBorder(
                 BorderFactory.createEmptyBorder(20, 25, 20, 25));
 
-        // ================= WELCOME SECTION =================
-
         JPanel welcomePanel = new JPanel();
-        welcomePanel.setLayout(
-                new BoxLayout(welcomePanel, BoxLayout.Y_AXIS));
+        welcomePanel.setLayout(new BoxLayout(welcomePanel, BoxLayout.Y_AXIS));
         welcomePanel.setBackground(paleGreen);
         welcomePanel.setBorder(
                 BorderFactory.createCompoundBorder(
                         BorderFactory.createLineBorder(borderGreen),
                         BorderFactory.createEmptyBorder(20, 20, 20, 20)));
-
         welcomePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JLabel welcomeTitle =
                 new JLabel("Welcome to Staff Dashboard!");
-
         welcomeTitle.setFont(new Font("Arial", Font.BOLD, 25));
         welcomeTitle.setForeground(darkGreen);
 
         JLabel welcomeDescription = new JLabel(
                 "<html>View your assigned hostel maintenance complaints."
                 + "<br>Update work progress and keep the administration informed.</html>");
-
-        welcomeDescription.setFont(
-                new Font("Arial", Font.PLAIN, 14));
+        welcomeDescription.setFont(new Font("Arial", Font.PLAIN, 14));
         welcomeDescription.setForeground(mutedGreen);
 
         welcomePanel.add(welcomeTitle);
@@ -135,8 +126,7 @@ public class StaffDashboard {
 
         // ================= SUMMARY CARDS =================
 
-        JPanel summaryPanel = new JPanel(
-                new GridLayout(1, 4, 12, 12));
+        JPanel summaryPanel = new JPanel(new GridLayout(1, 4, 12, 12));
         summaryPanel.setBackground(Color.WHITE);
         summaryPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
         summaryPanel.setMaximumSize(
@@ -152,14 +142,11 @@ public class StaffDashboard {
         summaryPanel.add(createCard("In Progress", progressLabel));
         summaryPanel.add(createCard("Completed", completedLabel));
 
-        // ================= TASK MANAGEMENT =================
-
         JLabel taskHeading = new JLabel("My Assigned Tasks");
         taskHeading.setFont(new Font("Arial", Font.BOLD, 21));
         taskHeading.setForeground(darkGreen);
         taskHeading.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        // MAIN CONTENT AREA
         JPanel taskPanel = createTaskPanel();
         taskPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -178,21 +165,17 @@ public class StaffDashboard {
 
         mainPanel.add(navPanel, BorderLayout.NORTH);
         mainPanel.add(pageScroll, BorderLayout.CENTER);
-
         frame.add(mainPanel);
 
-        // SAMPLE DATA FOR FRONTEND TESTING
-        addSampleData();
-        updateSummary();
+        // Load actual tasks from SQLite.
+        loadTasks();
 
-        // LOGOUT ACTION
         logoutButton.addActionListener(e -> {
             int choice = JOptionPane.showConfirmDialog(
                     frame,
                     "Are you sure you want to log out?",
                     "Confirm Logout",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.QUESTION_MESSAGE);
+                    JOptionPane.YES_NO_OPTION);
 
             if (choice == JOptionPane.YES_OPTION) {
                 frame.dispose();
@@ -233,18 +216,11 @@ public class StaffDashboard {
 
         JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setBackground(Color.WHITE);
-        panel.setBorder(
-                BorderFactory.createEmptyBorder(10, 0, 10, 0));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 0));
 
         String[] columns = {
-                "Complaint ID",
-                "Student",
-                "Room",
-                "Category",
-                "Description",
-                "Date",
-                "Status",
-                "Work Update"
+                "Task ID", "Complaint ID", "Student", "Room",
+                "Category", "Description", "Date", "Status", "Work Update"
         };
 
         taskModel = new DefaultTableModel(columns, 0) {
@@ -257,26 +233,31 @@ public class StaffDashboard {
         taskTable = new JTable(taskModel);
         styleTable(taskTable);
 
+        // Keep the task ID in the model but hide it from the user.
+        taskTable.removeColumn(taskTable.getColumnModel().getColumn(0));
+
         JScrollPane tableScroll = new JScrollPane(taskTable);
         tableScroll.setPreferredSize(new Dimension(1000, 300));
 
         panel.add(tableScroll, BorderLayout.CENTER);
 
-        // BUTTONS
         JPanel buttonPanel = new JPanel(
                 new FlowLayout(FlowLayout.LEFT, 8, 8));
         buttonPanel.setBackground(Color.WHITE);
 
+        JButton refreshButton = createButton("Refresh Tasks");
         JButton viewButton = createButton("View Details");
         JButton startButton = createButton("Start Work");
         JButton updateButton = createButton("Update Work");
         JButton completeButton = createButton("Mark Completed");
 
+        refreshButton.addActionListener(e -> loadTasks());
         viewButton.addActionListener(e -> viewDetails());
         startButton.addActionListener(e -> startWork());
         updateButton.addActionListener(e -> updateWork());
         completeButton.addActionListener(e -> completeWork());
 
+        buttonPanel.add(refreshButton);
         buttonPanel.add(viewButton);
         buttonPanel.add(startButton);
         buttonPanel.add(updateButton);
@@ -287,31 +268,79 @@ public class StaffDashboard {
         return panel;
     }
 
+    // ================= LOAD ASSIGNED TASKS =================
+
+    private void loadTasks() {
+
+        taskModel.setRowCount(0);
+
+        try {
+            List<String[]> tasks = Database.getStaffTasks(staffId);
+
+            for (String[] task : tasks) {
+                taskModel.addRow(task);
+            }
+
+            updateSummary();
+
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(
+                    frame,
+                    "Could not load assigned tasks: " + e.getMessage(),
+                    "Database Error",
+                    JOptionPane.ERROR_MESSAGE);
+            e.printStackTrace();
+        }
+    }
+
+    // ================= SELECTED ROW HELPERS =================
+
+    private int getSelectedModelRow() {
+
+        int viewRow = taskTable.getSelectedRow();
+
+        if (viewRow == -1) {
+            showMessage("Please select a task first.");
+            return -1;
+        }
+
+        return taskTable.convertRowIndexToModel(viewRow);
+    }
+
+    private int getSelectedTaskId(int modelRow) {
+        return Integer.parseInt(
+                taskModel.getValueAt(modelRow, 0).toString());
+    }
+
+    private String getSelectedStatus(int modelRow) {
+        return taskModel.getValueAt(modelRow, 7).toString();
+    }
+
+    private String getSelectedWorkUpdate(int modelRow) {
+        return taskModel.getValueAt(modelRow, 8).toString();
+    }
+
     // ================= VIEW DETAILS =================
 
     private void viewDetails() {
 
-        int row = taskTable.getSelectedRow();
-
+        int row = getSelectedModelRow();
         if (row == -1) {
-            showMessage("Please select a task first.");
             return;
         }
 
         String details =
-                "Complaint ID: " + taskModel.getValueAt(row, 0)
-                + "\nStudent: " + taskModel.getValueAt(row, 1)
-                + "\nRoom: " + taskModel.getValueAt(row, 2)
-                + "\nCategory: " + taskModel.getValueAt(row, 3)
-                + "\nDescription: " + taskModel.getValueAt(row, 4)
-                + "\nDate: " + taskModel.getValueAt(row, 5)
-                + "\nStatus: " + taskModel.getValueAt(row, 6)
-                + "\nWork Update: " + taskModel.getValueAt(row, 7);
+                "Complaint ID: " + taskModel.getValueAt(row, 1)
+                + "\nStudent: " + taskModel.getValueAt(row, 2)
+                + "\nRoom: " + taskModel.getValueAt(row, 3)
+                + "\nCategory: " + taskModel.getValueAt(row, 4)
+                + "\nDescription: " + taskModel.getValueAt(row, 5)
+                + "\nDate: " + taskModel.getValueAt(row, 6)
+                + "\nStatus: " + taskModel.getValueAt(row, 7)
+                + "\nWork Update: " + taskModel.getValueAt(row, 8);
 
         JOptionPane.showMessageDialog(
-                frame,
-                details,
-                "Task Details",
+                frame, details, "Task Details",
                 JOptionPane.INFORMATION_MESSAGE);
     }
 
@@ -319,79 +348,70 @@ public class StaffDashboard {
 
     private void startWork() {
 
-        int row = taskTable.getSelectedRow();
-
+        int row = getSelectedModelRow();
         if (row == -1) {
-            showMessage("Please select a task first.");
             return;
         }
 
-        String status = taskModel.getValueAt(row, 6).toString();
-
-        if (status.equals("Resolved")) {
+        if ("Resolved".equalsIgnoreCase(getSelectedStatus(row))) {
             showMessage("This task is already completed.");
             return;
         }
 
-        taskModel.setValueAt("In Progress", row, 6);
-        taskModel.setValueAt("Work started on " + LocalDate.now(),
-                row, 7);
+        String oldUpdate = getSelectedWorkUpdate(row);
+        String update = "Work started on " + LocalDate.now();
 
-        updateSummary();
-        showMessage("Task marked as In Progress.");
+        if (oldUpdate != null
+                && !oldUpdate.isBlank()
+                && !oldUpdate.equals("Not started")) {
+            update = oldUpdate + "\nWork started on " + LocalDate.now();
+        }
+
+        saveTaskUpdate(row, update, "In Progress");
     }
 
     // ================= UPDATE WORK =================
 
     private void updateWork() {
 
-        int row = taskTable.getSelectedRow();
-
+        int row = getSelectedModelRow();
         if (row == -1) {
-            showMessage("Please select a task first.");
             return;
         }
 
-        String status = taskModel.getValueAt(row, 6).toString();
-
-        if (status.equals("Resolved")) {
+        if ("Resolved".equalsIgnoreCase(getSelectedStatus(row))) {
             showMessage("This task is already completed.");
             return;
         }
 
         JTextArea updateArea = new JTextArea(
-                taskModel.getValueAt(row, 7).toString(), 5, 25);
-
+                getSelectedWorkUpdate(row), 5, 25);
         updateArea.setLineWrap(true);
         updateArea.setWrapStyleWord(true);
         updateArea.setFont(new Font("Arial", Font.PLAIN, 14));
 
-        JScrollPane scroll = new JScrollPane(updateArea);
-
         int result = JOptionPane.showConfirmDialog(
                 frame,
-                scroll,
+                new JScrollPane(updateArea),
                 "Enter Work Update",
                 JOptionPane.OK_CANCEL_OPTION,
                 JOptionPane.PLAIN_MESSAGE);
 
         if (result == JOptionPane.OK_OPTION) {
 
-            String workUpdate = updateArea.getText().trim();
+            String update = updateArea.getText().trim();
 
-            if (workUpdate.isEmpty()) {
+            if (update.isEmpty()) {
                 showMessage("Please enter a work update.");
                 return;
             }
 
-            taskModel.setValueAt(workUpdate, row, 7);
-
-            if (status.equals("Pending")) {
-                taskModel.setValueAt("In Progress", row, 6);
+            String status = getSelectedStatus(row);
+            if ("Pending".equalsIgnoreCase(status)) {
+                status = "In Progress";
             }
 
-            updateSummary();
-            showMessage("Work update saved successfully.");
+            saveTaskUpdate(row, update, status);
         }
     }
 
@@ -399,16 +419,12 @@ public class StaffDashboard {
 
     private void completeWork() {
 
-        int row = taskTable.getSelectedRow();
-
+        int row = getSelectedModelRow();
         if (row == -1) {
-            showMessage("Please select a task first.");
             return;
         }
 
-        String status = taskModel.getValueAt(row, 6).toString();
-
-        if (status.equals("Resolved")) {
+        if ("Resolved".equalsIgnoreCase(getSelectedStatus(row))) {
             showMessage("This task is already completed.");
             return;
         }
@@ -421,12 +437,44 @@ public class StaffDashboard {
 
         if (choice == JOptionPane.YES_OPTION) {
 
-            taskModel.setValueAt("Resolved", row, 6);
-            taskModel.setValueAt(
-                    "Work completed on " + LocalDate.now(), row, 7);
+            String oldUpdate = getSelectedWorkUpdate(row);
+            String update = "Work completed on " + LocalDate.now();
 
-            updateSummary();
-            showMessage("Task marked as completed successfully.");
+            if (oldUpdate != null
+                    && !oldUpdate.isBlank()
+                    && !oldUpdate.equals("Not started")) {
+                update = oldUpdate + "\n" + update;
+            }
+
+            saveTaskUpdate(row, update, "Resolved");
+        }
+    }
+
+    // ================= SAVE TO DATABASE =================
+
+    private void saveTaskUpdate(int row, String workUpdate, String status) {
+
+        int taskId = getSelectedTaskId(row);
+
+        try {
+            boolean saved = Database.updateStaffTask(
+                    taskId, staffId, workUpdate, status);
+
+            if (saved) {
+                loadTasks();
+                showMessage("Task updated successfully.");
+            } else {
+                showMessage(
+                        "Task could not be updated. Refresh and check the assignment.");
+            }
+
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(
+                    frame,
+                    "Could not save the update: " + e.getMessage(),
+                    "Database Error",
+                    JOptionPane.ERROR_MESSAGE);
+            e.printStackTrace();
         }
     }
 
@@ -447,11 +495,12 @@ public class StaffDashboard {
         table.getTableHeader().setForeground(darkGreen);
         table.getTableHeader().setReorderingAllowed(false);
 
-        int[] widths = {100, 100, 65, 120, 220, 100, 100, 230};
+        int[] widths = {
+                70, 100, 100, 65, 120, 220, 100, 100, 230
+        };
 
         for (int i = 0; i < widths.length; i++) {
-            table.getColumnModel()
-                    .getColumn(i)
+            table.getColumnModel().getColumn(i)
                     .setPreferredWidth(widths[i]);
         }
     }
@@ -482,14 +531,14 @@ public class StaffDashboard {
         int completed = 0;
 
         for (int i = 0; i < total; i++) {
+            String status = taskModel.getValueAt(i, 7).toString();
 
-            String status = taskModel.getValueAt(i, 6).toString();
-
-            if (status.equals("Pending")) {
+            if ("Pending".equalsIgnoreCase(status)) {
                 pending++;
-            } else if (status.equals("In Progress")) {
+            } else if ("In Progress".equalsIgnoreCase(status)) {
                 inProgress++;
-            } else if (status.equals("Resolved")) {
+            } else if ("Resolved".equalsIgnoreCase(status)
+                    || "Completed".equalsIgnoreCase(status)) {
                 completed++;
             }
         }
@@ -498,44 +547,6 @@ public class StaffDashboard {
         pendingLabel.setText(String.valueOf(pending));
         progressLabel.setText(String.valueOf(inProgress));
         completedLabel.setText(String.valueOf(completed));
-    }
-
-    // ================= SAMPLE DATA =================
-
-    private void addSampleData() {
-
-        taskModel.addRow(new Object[] {
-                "HC001",
-                "Ayushi",
-                "101",
-                "Electricity",
-                "Ceiling fan is not working",
-                LocalDate.now().toString(),
-                "Pending",
-                "Not started"
-        });
-
-        taskModel.addRow(new Object[] {
-                "HC002",
-                "Riya",
-                "205",
-                "Plumbing",
-                "Water tap is leaking",
-                LocalDate.now().toString(),
-                "In Progress",
-                "Repair work has started"
-        });
-
-        taskModel.addRow(new Object[] {
-                "HC003",
-                "Neha",
-                "110",
-                "Cleaning",
-                "Room cleaning request",
-                LocalDate.now().toString(),
-                "Resolved",
-                "Work completed"
-        });
     }
 
     private void showMessage(String message) {
@@ -547,10 +558,9 @@ public class StaffDashboard {
     }
 
     public static void main(String[] args) {
-
-        SwingUtilities.invokeLater(() -> {
-            StaffDashboard dashboard = new StaffDashboard();
-            dashboard.showDashboard();
-        });
+        SwingUtilities.invokeLater(() ->
+                JOptionPane.showMessageDialog(
+                        null,
+                        "Open Staff Login from Role Selection to access your assigned tasks."));
     }
 }

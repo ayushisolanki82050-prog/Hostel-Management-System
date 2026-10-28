@@ -30,17 +30,22 @@ public class RoleSelection {
         subtitle.setFont(new Font("Arial", Font.PLAIN, 16));
         subtitle.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        JButton studentButton = createButton("Student");
-        studentButton.addActionListener(e -> {
-          new StudentLogin();
+      JButton studentButton = createButton("Student");
+studentButton.addActionListener(e -> {
+    frame.dispose();
+new StudentLogin();
+    
 });
-        JButton adminButton = createButton("Admin");
-             adminButton.addActionListener(e -> {
-          new AdminLogin();
+JButton adminButton = createButton("Admin");
+adminButton.addActionListener(e -> {
+    new AdminLogin();
+    frame.dispose();
 });
-        JButton staffButton = createButton("Staff");
-             staffButton.addActionListener(e -> {
-          new StaffLogin();
+
+JButton staffButton = createButton("Staff");
+staffButton.addActionListener(e -> {
+    new StaffLogin();
+    frame.dispose();
 });
 
         mainPanel.add(heading);

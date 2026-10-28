@@ -2,6 +2,10 @@
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDate;
 
 public class StudentDashboard {
@@ -11,7 +15,9 @@ public class StudentDashboard {
     private JComboBox<String> categoryBox;
     private JTextArea descriptionArea;
     private DefaultTableModel tableModel;
-    private int nextComplaintId = 1;
+
+    // ID of the student who logged in
+    private final int studentId;
 
     // COLOURS
     private final Color darkGreen = new Color(20, 83, 45);
@@ -20,7 +26,9 @@ public class StudentDashboard {
     private final Color borderGreen = new Color(187, 220, 195);
     private final Color mutedGreen = new Color(82, 115, 90);
 
-    public StudentDashboard() {
+    public StudentDashboard(int studentId) {
+
+        this.studentId = studentId;
 
         // FRAME
         frame = new JFrame("HostelCare - Student Dashboard");
@@ -42,7 +50,6 @@ public class StudentDashboard {
                 BorderFactory.createEmptyBorder(5, 15, 5, 20)
         );
 
-        // LOGO SECTION
         JPanel logoPanel = new JPanel(
                 new FlowLayout(FlowLayout.LEFT, 8, 8)
         );
@@ -66,7 +73,6 @@ public class StudentDashboard {
         logoPanel.add(iconLabel);
         logoPanel.add(logoText);
 
-        // LOGOUT BUTTON
         JButton logoutButton = new JButton("Logout");
         logoutButton.setFont(new Font("Arial", Font.BOLD, 14));
         logoutButton.setForeground(Color.WHITE);
@@ -77,7 +83,9 @@ public class StudentDashboard {
                 BorderFactory.createEmptyBorder(10, 20, 10, 20)
         );
 
-        JPanel logoutPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JPanel logoutPanel = new JPanel(
+                new FlowLayout(FlowLayout.RIGHT)
+        );
         logoutPanel.setBackground(darkGreen);
         logoutPanel.add(logoutButton);
 
@@ -95,8 +103,7 @@ public class StudentDashboard {
                 BorderFactory.createEmptyBorder(20, 25, 20, 25)
         );
 
-        // ================= WELCOME SECTION =================
-
+        // WELCOME SECTION
         JPanel welcomePanel = new JPanel();
         welcomePanel.setLayout(
                 new BoxLayout(welcomePanel, BoxLayout.Y_AXIS)
@@ -127,8 +134,7 @@ public class StudentDashboard {
         welcomePanel.add(Box.createVerticalStrut(10));
         welcomePanel.add(welcomeDescription);
 
-        // ================= FORM HEADING =================
-
+        // FORM HEADING
         JLabel formHeading = new JLabel("Submit a Complaint");
         formHeading.setFont(new Font("Arial", Font.BOLD, 21));
         formHeading.setForeground(darkGreen);
@@ -151,7 +157,6 @@ public class StudentDashboard {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.anchor = GridBagConstraints.WEST;
 
-        // ROOM NUMBER
         JLabel roomLabel = new JLabel("Room Number");
         roomLabel.setFont(new Font("Arial", Font.BOLD, 14));
         roomLabel.setForeground(darkGreen);
@@ -168,7 +173,6 @@ public class StudentDashboard {
         gbc.weightx = 1;
         formPanel.add(roomField, gbc);
 
-        // CATEGORY
         JLabel categoryLabel = new JLabel("Complaint Category");
         categoryLabel.setFont(new Font("Arial", Font.BOLD, 14));
         categoryLabel.setForeground(darkGreen);
@@ -194,7 +198,6 @@ public class StudentDashboard {
         gbc.weightx = 1;
         formPanel.add(categoryBox, gbc);
 
-        // DESCRIPTION
         JLabel descriptionLabel = new JLabel("Description");
         descriptionLabel.setFont(new Font("Arial", Font.BOLD, 14));
         descriptionLabel.setForeground(darkGreen);
@@ -217,7 +220,6 @@ public class StudentDashboard {
         gbc.fill = GridBagConstraints.BOTH;
         formPanel.add(descriptionScroll, gbc);
 
-        // SUBMIT BUTTON
         JButton submitButton = new JButton("Submit Complaint");
         submitButton.setFont(new Font("Arial", Font.BOLD, 14));
         submitButton.setForeground(Color.WHITE);
@@ -277,7 +279,7 @@ public class StudentDashboard {
         historyScroll.setPreferredSize(new Dimension(900, 180));
         historyScroll.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        // ADD ALL CONTENT
+        // ADD CONTENT
         contentPanel.add(welcomePanel);
         contentPanel.add(Box.createVerticalStrut(22));
         contentPanel.add(formHeading);
@@ -327,33 +329,44 @@ public class StudentDashboard {
                 return;
             }
 
-            String complaintId = String.format(
-                    "HC%03d", nextComplaintId++
-            );
-
             String date = LocalDate.now().toString();
 
-            tableModel.addRow(new Object[]{
-                    complaintId,
+            int complaintId = Database.saveStudentComplaint(
+                    studentId,
                     room,
                     category,
                     description,
-                    date,
-                    "Pending"
-            });
-
-            JOptionPane.showMessageDialog(
-                    frame,
-                    "Complaint submitted successfully!\n"
-                            + "Complaint ID: " + complaintId
-                            + "\nStatus: Pending",
-                    "Success",
-                    JOptionPane.INFORMATION_MESSAGE
+                    date
             );
 
-            roomField.setText("");
-            categoryBox.setSelectedIndex(0);
-            descriptionArea.setText("");
+            if (complaintId != -1) {
+
+                JOptionPane.showMessageDialog(
+                        frame,
+                        "Complaint submitted successfully!\n"
+                                + "Complaint ID: "
+                                + String.format("HC%03d", complaintId)
+                                + "\nStatus: Pending",
+                        "Success",
+                        JOptionPane.INFORMATION_MESSAGE
+                );
+
+                roomField.setText("");
+                categoryBox.setSelectedIndex(0);
+                descriptionArea.setText("");
+
+                loadComplaintHistory();
+
+            } else {
+
+                JOptionPane.showMessageDialog(
+                        frame,
+                        "Unable to save your complaint.\n"
+                                + "Please check your database.",
+                        "Database Error",
+                        JOptionPane.ERROR_MESSAGE
+                );
+            }
         });
 
         // ================= LOGOUT ACTION =================
@@ -370,18 +383,75 @@ public class StudentDashboard {
 
             if (choice == JOptionPane.YES_OPTION) {
                 frame.dispose();
-new RoleSelection();
+                new RoleSelection();
             }
         });
+
+        // Load only this student's complaints
+        loadComplaintHistory();
     }
+
+    // ================= LOAD THIS STUDENT'S HISTORY =================
+
+    private void loadComplaintHistory() {
+
+        tableModel.setRowCount(0);
+
+        String sql = "SELECT id, room_number, category, description, "
+                + "complaint_date, status "
+                + "FROM complaints "
+                + "WHERE student_id = ? "
+                + "ORDER BY id DESC";
+
+        try (Connection connection = Database.connect();
+             PreparedStatement statement =
+                     connection.prepareStatement(sql)) {
+
+            statement.setInt(1, studentId);
+
+            try (ResultSet result = statement.executeQuery()) {
+
+                while (result.next()) {
+
+                    int id = result.getInt("id");
+
+                    tableModel.addRow(new Object[]{
+                            String.format("HC%03d", id),
+                            result.getString("room_number"),
+                            result.getString("category"),
+                            result.getString("description"),
+                            result.getString("complaint_date"),
+                            result.getString("status")
+                    });
+                }
+            }
+
+        } catch (SQLException ex) {
+
+            JOptionPane.showMessageDialog(
+                    frame,
+                    "Unable to load your complaint history.\n"
+                            + ex.getMessage(),
+                    "Database Error",
+                    JOptionPane.ERROR_MESSAGE
+            );
+
+            ex.printStackTrace();
+        }
+    }
+
+    // ================= SHOW DASHBOARD =================
 
     public void showDashboard() {
         frame.setVisible(true);
     }
 
+    // ================= MAIN METHOD =================
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
-            StudentDashboard dashboard = new StudentDashboard();
+            // For testing, replace 1 with an existing student ID.
+            StudentDashboard dashboard = new StudentDashboard(1);
             dashboard.showDashboard();
         });
     }

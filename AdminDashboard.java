@@ -2,6 +2,7 @@
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.sql.*;
 import java.time.LocalDate;
 
 public class AdminDashboard {
@@ -21,7 +22,6 @@ public class AdminDashboard {
     private JLabel progressLabel;
     private JLabel resolvedLabel;
 
-    // Colrs
     private final Color darkGreen = new Color(20, 83, 45);
     private final Color paleGreen = new Color(240, 253, 244);
     private final Color borderGreen = new Color(187, 220, 195);
@@ -39,8 +39,6 @@ public class AdminDashboard {
         frame.setLocationRelativeTo(null);
         frame.setLayout(new BorderLayout());
 
-        // ================= MAIN PANEL =================
-
         JPanel mainPanel = new JPanel(new BorderLayout());
         mainPanel.setBackground(Color.WHITE);
 
@@ -52,7 +50,6 @@ public class AdminDashboard {
         navPanel.setBorder(
                 BorderFactory.createEmptyBorder(5, 15, 5, 20));
 
-        // LOGO SECTION
         JPanel logoPanel = new JPanel(
                 new FlowLayout(FlowLayout.LEFT, 8, 8));
         logoPanel.setBackground(darkGreen);
@@ -75,7 +72,6 @@ public class AdminDashboard {
         logoPanel.add(iconLabel);
         logoPanel.add(logoText);
 
-        // NAVBAR RIGHT SECTION
         JPanel rightPanel = new JPanel(
                 new FlowLayout(FlowLayout.RIGHT, 12, 10));
         rightPanel.setBackground(darkGreen);
@@ -108,8 +104,6 @@ public class AdminDashboard {
         contentPanel.setBorder(
                 BorderFactory.createEmptyBorder(20, 25, 20, 25));
 
-        // ================= WELCOME SECTION =================
-
         JPanel welcomePanel = new JPanel();
         welcomePanel.setLayout(
                 new BoxLayout(welcomePanel, BoxLayout.Y_AXIS));
@@ -122,14 +116,12 @@ public class AdminDashboard {
 
         JLabel welcomeTitle =
                 new JLabel("Welcome to Admin Dashboard!");
-
         welcomeTitle.setFont(new Font("Arial", Font.BOLD, 25));
         welcomeTitle.setForeground(darkGreen);
 
         JLabel welcomeDescription = new JLabel(
                 "<html>Manage hostel complaints, staff and students from one place."
                         + "<br>Assign maintenance tasks and monitor complaint progress.</html>");
-
         welcomeDescription.setFont(new Font("Arial", Font.PLAIN, 14));
         welcomeDescription.setForeground(mutedGreen);
 
@@ -143,7 +135,6 @@ public class AdminDashboard {
                 new GridLayout(1, 4, 12, 12));
         summaryPanel.setBackground(Color.WHITE);
         summaryPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
         summaryPanel.setMaximumSize(
                 new Dimension(Integer.MAX_VALUE, 105));
 
@@ -157,7 +148,7 @@ public class AdminDashboard {
         summaryPanel.add(createCard("In Progress", progressLabel));
         summaryPanel.add(createCard("Resolved", resolvedLabel));
 
-        // ================= MANAGEMENT NAVBAR =================
+        // ================= TABS =================
 
         JTabbedPane tabs = new JTabbedPane();
         tabs.setFont(new Font("Arial", Font.BOLD, 14));
@@ -166,20 +157,15 @@ public class AdminDashboard {
         tabs.addTab("Staff Management", createStaffPanel());
         tabs.addTab("Student Management", createStudentPanel());
 
-        // Add content
+        JLabel managementHeading = new JLabel("Hostel Management");
+        managementHeading.setFont(new Font("Arial", Font.BOLD, 21));
+        managementHeading.setForeground(darkGreen);
+        managementHeading.setAlignmentX(Component.LEFT_ALIGNMENT);
+
         contentPanel.add(welcomePanel);
         contentPanel.add(Box.createVerticalStrut(20));
         contentPanel.add(summaryPanel);
         contentPanel.add(Box.createVerticalStrut(20));
-
-        JLabel managementHeading =
-                new JLabel("Hostel Management");
-
-        managementHeading.setFont(
-                new Font("Arial", Font.BOLD, 21));
-        managementHeading.setForeground(darkGreen);
-        managementHeading.setAlignmentX(Component.LEFT_ALIGNMENT);
-
         contentPanel.add(managementHeading);
         contentPanel.add(Box.createVerticalStrut(10));
 
@@ -193,21 +179,16 @@ public class AdminDashboard {
 
         mainPanel.add(navPanel, BorderLayout.NORTH);
         mainPanel.add(pageScroll, BorderLayout.CENTER);
-
         frame.add(mainPanel);
 
-        // SAMPLE DATA FOR FRONTEND TESTING
-        addSampleData();
-        updateSummary();
+        refreshAll();
 
-        // LOGOUT ACTION
         logoutButton.addActionListener(e -> {
             int choice = JOptionPane.showConfirmDialog(
                     frame,
                     "Are you sure you want to log out?",
                     "Confirm Logout",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.QUESTION_MESSAGE);
+                    JOptionPane.YES_NO_OPTION);
 
             if (choice == JOptionPane.YES_OPTION) {
                 frame.dispose();
@@ -216,6 +197,19 @@ public class AdminDashboard {
         });
 
         frame.setVisible(true);
+    }
+
+    // ================= DATABASE CONNECTION =================
+
+    private Connection connect() throws SQLException {
+        return Database.connect();
+    }
+
+    private void refreshAll() {
+        loadComplaints();
+        loadStaff();
+        loadStudents();
+        updateSummary();
     }
 
     // ================= SUMMARY CARD =================
@@ -278,65 +272,224 @@ public class AdminDashboard {
         JButton updateButton = createButton("Update Work");
         JButton viewButton = createButton("View Work");
         JButton deleteButton = createButton("Delete Complaint");
+        JButton refreshButton = createButton("Refresh");
 
         assignButton.addActionListener(e -> assignStaff());
         statusButton.addActionListener(e -> updateComplaintStatus());
         updateButton.addActionListener(e -> updateWork());
         viewButton.addActionListener(e -> viewWork());
         deleteButton.addActionListener(e -> deleteComplaint());
+        refreshButton.addActionListener(e -> refreshAll());
 
         buttons.add(assignButton);
         buttons.add(statusButton);
         buttons.add(updateButton);
         buttons.add(viewButton);
         buttons.add(deleteButton);
+        buttons.add(refreshButton);
 
         panel.add(buttons, BorderLayout.SOUTH);
 
         return panel;
     }
 
-    private void assignStaff() {
+    private int selectedComplaintId() {
 
         int row = complaintTable.getSelectedRow();
 
         if (row == -1) {
             showMessage("Please select a complaint first.");
+            return -1;
+        }
+
+        String id = complaintModel.getValueAt(row, 0).toString();
+
+        try {
+            return Integer.parseInt(id.replace("HC", ""));
+        } catch (NumberFormatException e) {
+            showMessage("Invalid complaint ID. Please refresh the table.");
+            return -1;
+        }
+    }
+
+    // ================= LOAD COMPLAINTS =================
+
+    private void loadComplaints() {
+
+        if (complaintModel == null) {
             return;
         }
 
-        if (staffModel.getRowCount() == 0) {
+        complaintModel.setRowCount(0);
+
+        // Get the student name by matching complaints.student_id
+        // with students.student_id.
+        String sql =
+                "SELECT c.id, c.student_id, s.name AS student_name, " +
+                "c.room_number, c.category, c.description, " +
+                "c.complaint_date, c.status, " +
+                "COALESCE(st.name, 'Not Assigned') AS staff_name, " +
+                "COALESCE(t.work_update, 'No update yet') AS work_update " +
+                "FROM complaints c " +
+                "LEFT JOIN students s ON c.student_id = s.student_id " +
+                "LEFT JOIN staff_tasks t ON t.task_id = (" +
+                " SELECT MAX(t2.task_id) FROM staff_tasks t2 " +
+                " WHERE t2.complaint_id = c.id) " +
+                "LEFT JOIN staff st ON t.staff_id = st.staff_id " +
+                "ORDER BY c.id DESC";
+
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(sql);
+             ResultSet rs = pstmt.executeQuery()) {
+
+            while (rs.next()) {
+
+                int id = rs.getInt("id");
+                String studentName = rs.getString("student_name");
+                String studentId = rs.getString("student_id");
+
+                if (studentName == null || studentName.trim().isEmpty()) {
+                    if (studentId == null || studentId.trim().isEmpty()) {
+                        studentName = "Unknown (No Student ID)";
+                    } else {
+                        studentName = "Unknown (Student ID: "
+                                + studentId + ")";
+                    }
+                }
+
+                complaintModel.addRow(new Object[] {
+                        String.format("HC%03d", id),
+                        studentName,
+                        rs.getString("room_number"),
+                        rs.getString("category"),
+                        rs.getString("description"),
+                        rs.getString("complaint_date"),
+                        rs.getString("status"),
+                        rs.getString("staff_name"),
+                        rs.getString("work_update")
+                });
+            }
+
+        } catch (SQLException e) {
+            showDatabaseError(e);
+        }
+
+        updateSummary();
+    }
+
+    // ================= ASSIGN STAFF =================
+
+    private void assignStaff() {
+
+        int complaintId = selectedComplaintId();
+
+        if (complaintId == -1) {
+            return;
+        }
+
+        JComboBox<StaffChoice> staffBox = new JComboBox<>();
+
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "SELECT staff_id, name, category FROM staff ORDER BY name");
+             ResultSet rs = pstmt.executeQuery()) {
+
+            while (rs.next()) {
+                staffBox.addItem(new StaffChoice(
+                        rs.getInt("staff_id"),
+                        rs.getString("name"),
+                        rs.getString("category")));
+            }
+
+        } catch (SQLException e) {
+            showDatabaseError(e);
+            return;
+        }
+
+        if (staffBox.getItemCount() == 0) {
             showMessage("Please add staff members first.");
             return;
         }
 
-        String[] names = new String[staffModel.getRowCount()];
+        int result = JOptionPane.showConfirmDialog(
+                frame,
+                staffBox,
+                "Select Staff Member",
+                JOptionPane.OK_CANCEL_OPTION);
 
-        for (int i = 0; i < staffModel.getRowCount(); i++) {
-            names[i] = staffModel.getValueAt(i, 1).toString();
+        if (result != JOptionPane.OK_OPTION) {
+            return;
         }
 
-        String selected = (String) JOptionPane.showInputDialog(
-                frame,
-                "Select staff member:",
-                "Assign Complaint",
-                JOptionPane.QUESTION_MESSAGE,
-                null,
-                names,
-                names[0]);
+        StaffChoice selected =
+                (StaffChoice) staffBox.getSelectedItem();
 
-        if (selected != null) {
-            complaintModel.setValueAt(selected, row, 7);
+        if (selected == null) {
+            return;
+        }
+
+        String sql =
+                "INSERT INTO staff_tasks " +
+                "(complaint_id, staff_id, assigned_date, work_update, task_status) " +
+                "VALUES (?, ?, ?, ?, ?)";
+
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, complaintId);
+            pstmt.setInt(2, selected.id);
+            pstmt.setString(3, LocalDate.now().toString());
+            pstmt.setString(4, "No update yet");
+            pstmt.setString(5, "Assigned");
+
+            pstmt.executeUpdate();
+
+            try (PreparedStatement statusStmt = conn.prepareStatement(
+                    "UPDATE complaints SET status = " +
+                    "CASE WHEN status = 'Resolved' THEN status " +
+                    "ELSE 'Pending' END WHERE id = ?")) {
+
+                statusStmt.setInt(1, complaintId);
+                statusStmt.executeUpdate();
+            }
+
+            loadComplaints();
             showMessage("Staff assigned successfully.");
+
+        } catch (SQLException e) {
+            showDatabaseError(e);
         }
     }
 
+    private static class StaffChoice {
+
+        int id;
+        String name;
+        String category;
+
+        StaffChoice(int id, String name, String category) {
+            this.id = id;
+            this.name = name;
+            this.category = category;
+        }
+
+        @Override
+        public String toString() {
+            if (category == null || category.trim().isEmpty()) {
+                return name + " (ID: " + id + ")";
+            }
+
+            return name + " - " + category + " (ID: " + id + ")";
+        }
+    }
+
+    // ================= UPDATE COMPLAINT STATUS =================
+
     private void updateComplaintStatus() {
 
-        int row = complaintTable.getSelectedRow();
+        int complaintId = selectedComplaintId();
 
-        if (row == -1) {
-            showMessage("Please select a complaint first.");
+        if (complaintId == -1) {
             return;
         }
 
@@ -344,6 +497,7 @@ public class AdminDashboard {
                 "Pending", "In Progress", "Resolved"
         };
 
+        int row = complaintTable.getSelectedRow();
         String current = complaintModel.getValueAt(row, 6).toString();
 
         String selected = (String) JOptionPane.showInputDialog(
@@ -355,23 +509,55 @@ public class AdminDashboard {
                 statuses,
                 current);
 
-        if (selected != null) {
-            complaintModel.setValueAt(selected, row, 6);
-            updateSummary();
-        }
-    }
-
-    private void updateWork() {
-
-        int row = complaintTable.getSelectedRow();
-
-        if (row == -1) {
-            showMessage("Please select a complaint first.");
+        if (selected == null) {
             return;
         }
 
-        String oldUpdate =
-                complaintModel.getValueAt(row, 8).toString();
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "UPDATE complaints SET status = ? WHERE id = ?")) {
+
+            pstmt.setString(1, selected);
+            pstmt.setInt(2, complaintId);
+            pstmt.executeUpdate();
+
+            loadComplaints();
+            showMessage("Complaint status updated.");
+
+        } catch (SQLException e) {
+            showDatabaseError(e);
+        }
+    }
+
+    // ================= UPDATE WORK =================
+
+    private void updateWork() {
+
+        int complaintId = selectedComplaintId();
+
+        if (complaintId == -1) {
+            return;
+        }
+
+        String oldUpdate = "";
+
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "SELECT work_update FROM staff_tasks " +
+                     "WHERE complaint_id = ? ORDER BY task_id DESC LIMIT 1")) {
+
+            pstmt.setInt(1, complaintId);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next() && rs.getString("work_update") != null) {
+                    oldUpdate = rs.getString("work_update");
+                }
+            }
+
+        } catch (SQLException e) {
+            showDatabaseError(e);
+            return;
+        }
 
         JTextArea area = new JTextArea(oldUpdate, 5, 25);
         area.setLineWrap(true);
@@ -383,13 +569,51 @@ public class AdminDashboard {
                 "Enter Staff Work Update",
                 JOptionPane.OK_CANCEL_OPTION);
 
-        if (result == JOptionPane.OK_OPTION) {
-            complaintModel.setValueAt(
-                    area.getText().trim(), row, 8);
+        if (result != JOptionPane.OK_OPTION) {
+            return;
+        }
 
-            showMessage("Work update saved.");
+        String update = area.getText().trim();
+
+        try (Connection conn = connect()) {
+
+            int taskId = -1;
+
+            try (PreparedStatement findTask = conn.prepareStatement(
+                    "SELECT task_id FROM staff_tasks " +
+                    "WHERE complaint_id = ? ORDER BY task_id DESC LIMIT 1")) {
+
+                findTask.setInt(1, complaintId);
+
+                try (ResultSet rs = findTask.executeQuery()) {
+                    if (rs.next()) {
+                        taskId = rs.getInt("task_id");
+                    }
+                }
+            }
+
+            if (taskId == -1) {
+                showMessage("Assign a staff member before adding a work update.");
+                return;
+            }
+
+            try (PreparedStatement pstmt = conn.prepareStatement(
+                    "UPDATE staff_tasks SET work_update = ? WHERE task_id = ?")) {
+
+                pstmt.setString(1, update);
+                pstmt.setInt(2, taskId);
+                pstmt.executeUpdate();
+            }
+
+            loadComplaints();
+            showMessage("Work update saved successfully.");
+
+        } catch (SQLException e) {
+            showDatabaseError(e);
         }
     }
+
+    // ================= VIEW WORK =================
 
     private void viewWork() {
 
@@ -403,34 +627,70 @@ public class AdminDashboard {
         String details =
                 "Complaint ID: " + complaintModel.getValueAt(row, 0)
                 + "\nStudent: " + complaintModel.getValueAt(row, 1)
+                + "\nRoom: " + complaintModel.getValueAt(row, 2)
                 + "\nCategory: " + complaintModel.getValueAt(row, 3)
                 + "\nStatus: " + complaintModel.getValueAt(row, 6)
                 + "\nAssigned Staff: " + complaintModel.getValueAt(row, 7)
                 + "\nWork Update: " + complaintModel.getValueAt(row, 8);
 
         JOptionPane.showMessageDialog(
-                frame, details, "Complaint Details",
+                frame,
+                details,
+                "Complaint Details",
                 JOptionPane.INFORMATION_MESSAGE);
     }
 
+    // ================= DELETE COMPLAINT =================
+
     private void deleteComplaint() {
 
-        int row = complaintTable.getSelectedRow();
+        int complaintId = selectedComplaintId();
 
-        if (row == -1) {
-            showMessage("Please select a complaint first.");
+        if (complaintId == -1) {
             return;
         }
 
         int choice = JOptionPane.showConfirmDialog(
                 frame,
-                "Delete the selected complaint?",
+                "Delete the selected complaint and its assignments?",
                 "Confirm Delete",
                 JOptionPane.YES_NO_OPTION);
 
-        if (choice == JOptionPane.YES_OPTION) {
-            complaintModel.removeRow(row);
-            updateSummary();
+        if (choice != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        try (Connection conn = connect()) {
+
+            conn.setAutoCommit(false);
+
+            try {
+                try (PreparedStatement taskStmt = conn.prepareStatement(
+                        "DELETE FROM staff_tasks WHERE complaint_id = ?")) {
+
+                    taskStmt.setInt(1, complaintId);
+                    taskStmt.executeUpdate();
+                }
+
+                try (PreparedStatement complaintStmt = conn.prepareStatement(
+                        "DELETE FROM complaints WHERE id = ?")) {
+
+                    complaintStmt.setInt(1, complaintId);
+                    complaintStmt.executeUpdate();
+                }
+
+                conn.commit();
+
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            }
+
+            loadComplaints();
+            showMessage("Complaint deleted successfully.");
+
+        } catch (SQLException e) {
+            showDatabaseError(e);
         }
     }
 
@@ -465,31 +725,64 @@ public class AdminDashboard {
         JButton addButton = createButton("Add Staff");
         JButton editButton = createButton("Edit Staff");
         JButton deleteButton = createButton("Delete Staff");
+        JButton refreshButton = createButton("Refresh");
 
         addButton.addActionListener(e -> addStaff());
         editButton.addActionListener(e -> editStaff());
         deleteButton.addActionListener(e -> deleteStaff());
+        refreshButton.addActionListener(e -> loadStaff());
 
         buttons.add(addButton);
         buttons.add(editButton);
         buttons.add(deleteButton);
+        buttons.add(refreshButton);
 
         panel.add(buttons, BorderLayout.SOUTH);
 
         return panel;
     }
 
+    private void loadStaff() {
+
+        if (staffModel == null) {
+            return;
+        }
+
+        staffModel.setRowCount(0);
+
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "SELECT staff_id, name, category, phone " +
+                     "FROM staff ORDER BY staff_id");
+             ResultSet rs = pstmt.executeQuery()) {
+
+            while (rs.next()) {
+                staffModel.addRow(new Object[] {
+                        rs.getInt("staff_id"),
+                        rs.getString("name"),
+                        rs.getString("category"),
+                        rs.getString("phone")
+                });
+            }
+
+        } catch (SQLException e) {
+            showDatabaseError(e);
+        }
+    }
+
     private void addStaff() {
 
-        JTextField id = new JTextField();
         JTextField name = new JTextField();
+        JTextField email = new JTextField();
+        JPasswordField password = new JPasswordField();
         JTextField role = new JTextField();
         JTextField phone = new JTextField();
 
         Object[] fields = {
-                "Staff ID:", id,
                 "Name:", name,
-                "Role:", role,
+                "Email:", email,
+                "Password:", password,
+                "Role / Category:", role,
                 "Phone:", phone
         };
 
@@ -497,25 +790,38 @@ public class AdminDashboard {
                 frame, fields, "Add Staff",
                 JOptionPane.OK_CANCEL_OPTION);
 
-        if (result == JOptionPane.OK_OPTION) {
+        if (result != JOptionPane.OK_OPTION) {
+            return;
+        }
 
-            if (id.getText().trim().isEmpty()
-                    || name.getText().trim().isEmpty()) {
-                showMessage("Staff ID and name are required.");
-                return;
-            }
+        if (name.getText().trim().isEmpty()
+                || email.getText().trim().isEmpty()
+                || password.getPassword().length == 0) {
 
-            if (staffIdExists(id.getText().trim(), -1)) {
-                showMessage("This Staff ID already exists.");
-                return;
-            }
+            showMessage("Name, email and password are required.");
+            return;
+        }
 
-            staffModel.addRow(new Object[] {
-                    id.getText().trim(),
-                    name.getText().trim(),
-                    role.getText().trim(),
-                    phone.getText().trim()
-            });
+        String sql =
+                "INSERT INTO staff (name, email, password, phone, category) " +
+                "VALUES (?, ?, ?, ?, ?)";
+
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, name.getText().trim());
+            pstmt.setString(2, email.getText().trim());
+            pstmt.setString(3, new String(password.getPassword()));
+            pstmt.setString(4, phone.getText().trim());
+            pstmt.setString(5, role.getText().trim());
+
+            pstmt.executeUpdate();
+
+            loadStaff();
+            showMessage("Staff member added successfully.");
+
+        } catch (SQLException e) {
+            showDatabaseError(e);
         }
     }
 
@@ -528,19 +834,19 @@ public class AdminDashboard {
             return;
         }
 
-        JTextField id = new JTextField(
+        int id = Integer.parseInt(
                 staffModel.getValueAt(row, 0).toString());
+
         JTextField name = new JTextField(
                 staffModel.getValueAt(row, 1).toString());
         JTextField role = new JTextField(
-                staffModel.getValueAt(row, 2).toString());
+                valueOfCell(staffModel, row, 2));
         JTextField phone = new JTextField(
-                staffModel.getValueAt(row, 3).toString());
+                valueOfCell(staffModel, row, 3));
 
         Object[] fields = {
-                "Staff ID:", id,
                 "Name:", name,
-                "Role:", role,
+                "Role / Category:", role,
                 "Phone:", phone
         };
 
@@ -548,49 +854,36 @@ public class AdminDashboard {
                 frame, fields, "Edit Staff",
                 JOptionPane.OK_CANCEL_OPTION);
 
-        if (result == JOptionPane.OK_OPTION) {
-
-            if (id.getText().trim().isEmpty()
-                    || name.getText().trim().isEmpty()) {
-                showMessage("Staff ID and name are required.");
-                return;
-            }
-
-            if (staffIdExists(id.getText().trim(), row)) {
-                showMessage("This Staff ID already exists.");
-                return;
-            }
-
-            String oldName =
-                    staffModel.getValueAt(row, 1).toString();
-            String newName = name.getText().trim();
-
-            staffModel.setValueAt(id.getText().trim(), row, 0);
-            staffModel.setValueAt(newName, row, 1);
-            staffModel.setValueAt(role.getText().trim(), row, 2);
-            staffModel.setValueAt(phone.getText().trim(), row, 3);
-
-            // Update complaint assignments if staff name changes.
-            for (int i = 0; i < complaintModel.getRowCount(); i++) {
-                if (complaintModel.getValueAt(i, 7)
-                        .toString().equals(oldName)) {
-                    complaintModel.setValueAt(newName, i, 7);
-                }
-            }
-        }
-    }
-
-    private boolean staffIdExists(String id, int ignoredRow) {
-
-        for (int i = 0; i < staffModel.getRowCount(); i++) {
-            if (i != ignoredRow
-                    && staffModel.getValueAt(i, 0).toString()
-                    .equalsIgnoreCase(id)) {
-                return true;
-            }
+        if (result != JOptionPane.OK_OPTION) {
+            return;
         }
 
-        return false;
+        if (name.getText().trim().isEmpty()) {
+            showMessage("Name is required.");
+            return;
+        }
+
+        String sql =
+                "UPDATE staff SET name = ?, category = ?, phone = ? " +
+                "WHERE staff_id = ?";
+
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, name.getText().trim());
+            pstmt.setString(2, role.getText().trim());
+            pstmt.setString(3, phone.getText().trim());
+            pstmt.setInt(4, id);
+
+            pstmt.executeUpdate();
+
+            loadStaff();
+            loadComplaints();
+            showMessage("Staff details updated.");
+
+        } catch (SQLException e) {
+            showDatabaseError(e);
+        }
     }
 
     private void deleteStaff() {
@@ -602,25 +895,51 @@ public class AdminDashboard {
             return;
         }
 
+        int id = Integer.parseInt(
+                staffModel.getValueAt(row, 0).toString());
+
         int choice = JOptionPane.showConfirmDialog(
                 frame,
-                "Delete this staff member?",
+                "Delete this staff member and their task assignments?",
                 "Confirm Delete",
                 JOptionPane.YES_NO_OPTION);
 
-        if (choice == JOptionPane.YES_OPTION) {
+        if (choice != JOptionPane.YES_OPTION) {
+            return;
+        }
 
-            String name = staffModel.getValueAt(row, 1).toString();
+        try (Connection conn = connect()) {
 
-            staffModel.removeRow(row);
+            conn.setAutoCommit(false);
 
-            for (int i = 0; i < complaintModel.getRowCount(); i++) {
-                if (complaintModel.getValueAt(i, 7)
-                        .toString().equals(name)) {
-                    complaintModel.setValueAt(
-                            "Not Assigned", i, 7);
+            try {
+                try (PreparedStatement taskStmt = conn.prepareStatement(
+                        "DELETE FROM staff_tasks WHERE staff_id = ?")) {
+
+                    taskStmt.setInt(1, id);
+                    taskStmt.executeUpdate();
                 }
+
+                try (PreparedStatement staffStmt = conn.prepareStatement(
+                        "DELETE FROM staff WHERE staff_id = ?")) {
+
+                    staffStmt.setInt(1, id);
+                    staffStmt.executeUpdate();
+                }
+
+                conn.commit();
+
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
             }
+
+            loadStaff();
+            loadComplaints();
+            showMessage("Staff member deleted.");
+
+        } catch (SQLException e) {
+            showDatabaseError(e);
         }
     }
 
@@ -655,30 +974,63 @@ public class AdminDashboard {
         JButton addButton = createButton("Add Student");
         JButton editButton = createButton("Edit Student");
         JButton deleteButton = createButton("Delete Student");
+        JButton refreshButton = createButton("Refresh");
 
         addButton.addActionListener(e -> addStudent());
         editButton.addActionListener(e -> editStudent());
         deleteButton.addActionListener(e -> deleteStudent());
+        refreshButton.addActionListener(e -> loadStudents());
 
         buttons.add(addButton);
         buttons.add(editButton);
         buttons.add(deleteButton);
+        buttons.add(refreshButton);
 
         panel.add(buttons, BorderLayout.SOUTH);
 
         return panel;
     }
 
+    private void loadStudents() {
+
+        if (studentModel == null) {
+            return;
+        }
+
+        studentModel.setRowCount(0);
+
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "SELECT student_id, name, room_number, phone " +
+                     "FROM students ORDER BY student_id");
+             ResultSet rs = pstmt.executeQuery()) {
+
+            while (rs.next()) {
+                studentModel.addRow(new Object[] {
+                        rs.getInt("student_id"),
+                        rs.getString("name"),
+                        rs.getString("room_number"),
+                        rs.getString("phone")
+                });
+            }
+
+        } catch (SQLException e) {
+            showDatabaseError(e);
+        }
+    }
+
     private void addStudent() {
 
-        JTextField id = new JTextField();
         JTextField name = new JTextField();
+        JTextField email = new JTextField();
+        JPasswordField password = new JPasswordField();
         JTextField room = new JTextField();
         JTextField phone = new JTextField();
 
         Object[] fields = {
-                "Student ID:", id,
                 "Name:", name,
+                "Email:", email,
+                "Password:", password,
                 "Room Number:", room,
                 "Phone:", phone
         };
@@ -687,25 +1039,39 @@ public class AdminDashboard {
                 frame, fields, "Add Student",
                 JOptionPane.OK_CANCEL_OPTION);
 
-        if (result == JOptionPane.OK_OPTION) {
+        if (result != JOptionPane.OK_OPTION) {
+            return;
+        }
 
-            if (id.getText().trim().isEmpty()
-                    || name.getText().trim().isEmpty()) {
-                showMessage("Student ID and name are required.");
-                return;
-            }
+        if (name.getText().trim().isEmpty()
+                || email.getText().trim().isEmpty()
+                || password.getPassword().length == 0) {
 
-            if (studentIdExists(id.getText().trim(), -1)) {
-                showMessage("This Student ID already exists.");
-                return;
-            }
+            showMessage("Name, email and password are required.");
+            return;
+        }
 
-            studentModel.addRow(new Object[] {
-                    id.getText().trim(),
-                    name.getText().trim(),
-                    room.getText().trim(),
-                    phone.getText().trim()
-            });
+        String sql =
+                "INSERT INTO students " +
+                "(name, email, password, room_number, phone) " +
+                "VALUES (?, ?, ?, ?, ?)";
+
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, name.getText().trim());
+            pstmt.setString(2, email.getText().trim());
+            pstmt.setString(3, new String(password.getPassword()));
+            pstmt.setString(4, room.getText().trim());
+            pstmt.setString(5, phone.getText().trim());
+
+            pstmt.executeUpdate();
+
+            loadStudents();
+            showMessage("Student added successfully.");
+
+        } catch (SQLException e) {
+            showDatabaseError(e);
         }
     }
 
@@ -718,17 +1084,17 @@ public class AdminDashboard {
             return;
         }
 
-        JTextField id = new JTextField(
+        int id = Integer.parseInt(
                 studentModel.getValueAt(row, 0).toString());
+
         JTextField name = new JTextField(
                 studentModel.getValueAt(row, 1).toString());
         JTextField room = new JTextField(
-                studentModel.getValueAt(row, 2).toString());
+                valueOfCell(studentModel, row, 2));
         JTextField phone = new JTextField(
-                studentModel.getValueAt(row, 3).toString());
+                valueOfCell(studentModel, row, 3));
 
         Object[] fields = {
-                "Student ID:", id,
                 "Name:", name,
                 "Room Number:", room,
                 "Phone:", phone
@@ -738,37 +1104,36 @@ public class AdminDashboard {
                 frame, fields, "Edit Student",
                 JOptionPane.OK_CANCEL_OPTION);
 
-        if (result == JOptionPane.OK_OPTION) {
-
-            if (id.getText().trim().isEmpty()
-                    || name.getText().trim().isEmpty()) {
-                showMessage("Student ID and name are required.");
-                return;
-            }
-
-            if (studentIdExists(id.getText().trim(), row)) {
-                showMessage("This Student ID already exists.");
-                return;
-            }
-
-            studentModel.setValueAt(id.getText().trim(), row, 0);
-            studentModel.setValueAt(name.getText().trim(), row, 1);
-            studentModel.setValueAt(room.getText().trim(), row, 2);
-            studentModel.setValueAt(phone.getText().trim(), row, 3);
-        }
-    }
-
-    private boolean studentIdExists(String id, int ignoredRow) {
-
-        for (int i = 0; i < studentModel.getRowCount(); i++) {
-            if (i != ignoredRow
-                    && studentModel.getValueAt(i, 0).toString()
-                    .equalsIgnoreCase(id)) {
-                return true;
-            }
+        if (result != JOptionPane.OK_OPTION) {
+            return;
         }
 
-        return false;
+        if (name.getText().trim().isEmpty()) {
+            showMessage("Name is required.");
+            return;
+        }
+
+        String sql =
+                "UPDATE students SET name = ?, room_number = ?, phone = ? " +
+                "WHERE student_id = ?";
+
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, name.getText().trim());
+            pstmt.setString(2, room.getText().trim());
+            pstmt.setString(3, phone.getText().trim());
+            pstmt.setInt(4, id);
+
+            pstmt.executeUpdate();
+
+            loadStudents();
+            loadComplaints();
+            showMessage("Student details updated.");
+
+        } catch (SQLException e) {
+            showDatabaseError(e);
+        }
     }
 
     private void deleteStudent() {
@@ -780,14 +1145,37 @@ public class AdminDashboard {
             return;
         }
 
+        int id = Integer.parseInt(
+                studentModel.getValueAt(row, 0).toString());
+
         int choice = JOptionPane.showConfirmDialog(
                 frame,
-                "Delete this student?",
+                "Delete this student? Students with existing complaints cannot be deleted.",
                 "Confirm Delete",
                 JOptionPane.YES_NO_OPTION);
 
-        if (choice == JOptionPane.YES_OPTION) {
-            studentModel.removeRow(row);
+        if (choice != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        try (Connection conn = connect();
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "DELETE FROM students WHERE student_id = ?")) {
+
+            pstmt.setInt(1, id);
+
+            int affected = pstmt.executeUpdate();
+
+            if (affected > 0) {
+                loadStudents();
+                loadComplaints();
+                showMessage("Student deleted successfully.");
+            }
+
+        } catch (SQLException e) {
+            showMessage(
+                    "Could not delete this student. They may have existing complaints.\n"
+                    + e.getMessage());
         }
     }
 
@@ -829,6 +1217,10 @@ public class AdminDashboard {
 
     private void updateSummary() {
 
+        if (complaintModel == null) {
+            return;
+        }
+
         int total = complaintModel.getRowCount();
         int pending = 0;
         int inProgress = 0;
@@ -837,7 +1229,7 @@ public class AdminDashboard {
         for (int i = 0; i < total; i++) {
 
             String status =
-                    complaintModel.getValueAt(i, 6).toString();
+                    String.valueOf(complaintModel.getValueAt(i, 6));
 
             if (status.equals("Pending")) {
                 pending++;
@@ -854,46 +1246,28 @@ public class AdminDashboard {
         resolvedLabel.setText(String.valueOf(resolved));
     }
 
-    // ================= SAMPLE DATA =================
+    // ================= HELPER METHODS =================
 
-    private void addSampleData() {
+    private String valueOfCell(
+            DefaultTableModel model, int row, int column) {
 
-        staffModel.addRow(new Object[] {
-                "ST001", "Rahul", "Electrician", "9876543210"
-        });
-
-        staffModel.addRow(new Object[] {
-                "ST002", "Aman", "Plumber", "9876543211"
-        });
-
-        studentModel.addRow(new Object[] {
-                "S001", "Ayushi", "101", "9876543212"
-        });
-
-        complaintModel.addRow(new Object[] {
-                "HC001", "Ayushi", "101", "Electricity",
-                "Fan is not working", LocalDate.now().toString(),
-                "Pending", "Not Assigned", "No update yet"
-        });
-
-        complaintModel.addRow(new Object[] {
-                "HC002", "Riya", "205", "Plumbing",
-                "Water tap is leaking", LocalDate.now().toString(),
-                "In Progress", "Aman", "Repair work started"
-        });
-
-        complaintModel.addRow(new Object[] {
-                "HC003", "Neha", "110", "Cleaning",
-                "Room needs cleaning", LocalDate.now().toString(),
-                "Resolved", "Rahul", "Work completed"
-        });
+        Object value = model.getValueAt(row, column);
+        return value == null ? "" : value.toString();
     }
 
     private void showMessage(String message) {
         JOptionPane.showMessageDialog(frame, message);
     }
 
-    // Allows this dashboard to be opened from another class.
+    private void showDatabaseError(SQLException e) {
+        JOptionPane.showMessageDialog(
+                frame,
+                "Database error:\n" + e.getMessage(),
+                "Database Error",
+                JOptionPane.ERROR_MESSAGE);
+        e.printStackTrace();
+    }
+
     public void showDashboard() {
         frame.setVisible(true);
     }
